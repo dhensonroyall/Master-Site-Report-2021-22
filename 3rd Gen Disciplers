@@ -1,0 +1,60 @@
+function thirdGenDisciplers() {
+  const index = ss.getSheetByName('Index').getDataRange().getValues();
+  index.shift();
+
+  let discipleshipReport = new Array();
+  index.forEach(row => {
+    let site = row[0];
+    let report = SpreadsheetApp.openByUrl(row[4]);
+    // let site = 'Moscow';
+    // let report = SpreadsheetApp.openByUrl('https://docs.google.com/spreadsheets/d/####/edit');
+    let sheet = report.getSheetByName('Discipleship');
+    let discipleshipTable = sheet.getRange(34,2,sheet.getLastRow()-33,3).getValues();
+    discipleshipTable = discipleshipTable.filter(row => row[0]);
+    let disciplers = discipleshipTable.map(row => row[1]).filter(onlyUnique).flat();
+    
+    disciplers.forEach(der => {
+
+      let derObj = {site: site, name: der, disciples: [], gens: 1};
+
+      // 2nd Gen
+      let derTable = discipleshipTable.filter(row => row[1] === der);
+      derObj.gens = 2;
+      derTable.forEach((row,i) => {
+        let dee = row[0];
+        let type = row[2];
+        derObj.disciples.push({name: dee, type: type, disciples: [], gens: 1});
+
+        // 3rd Gen
+        let deeTable = discipleshipTable.filter(row => row[1] === dee);
+        if (deeTable.length > 0) {
+          derObj.gens = 3;
+          deeTable.forEach((row,j) => {
+            let dee2 = row[0];
+            let type2 = row[2];
+            derObj.disciples[i].disciples.push({name: dee2, type: type2, disciples: []});
+
+            // 4th Gen
+            let dee2Table = discipleshipTable.filter(row => row[1] === dee2);
+            if (dee2Table.length > 0) {
+              derObj.gens = 4;
+              dee2Table.forEach((row,k) => {
+                let dee3 = row[0];
+                let type3 = row[2];
+                derObj.disciples[i].disciples[j].disciples.push({name: dee3, type: type3, disciples: []});
+              });
+            };
+          });
+        };
+      });
+      discipleshipReport.push(derObj)
+    })
+  })
+
+  let thirdGenPlus = discipleshipReport.filter(der => der.gens >=3);
+
+  let ssArray = new Array();
+  thirdGenPlus.forEach(der => ssArray.push([der.site, der.name, der.gens]));
+  ss.getSheetByName('3rd').getRange(2,1,ssArray.length,ssArray[0].length).setValues(ssArray);    
+
+}
