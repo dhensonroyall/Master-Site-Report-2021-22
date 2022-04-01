@@ -1,0 +1,286 @@
+function reportUpdate(site,report) {
+  updateAttendanceSheet(site,report);
+  updateDiscipleshipData(site,report);
+  updateCustomData(site,report);
+}
+
+function updateAttendanceSheet(site,report) {
+
+  // Get the data
+  let gatheringData = getGatheringData(site);
+  let villageData = getVillageAttendanceData(site);
+  let allData = [...gatheringData,...villageData];
+
+  // Set an array of weeks
+  let firstDate = new Date('8/1/2021')
+  let dataWeeks = new Array();
+  allData.forEach(item => dataWeeks.push(item.week));
+  let firstWeek = Math.min(...dataWeeks);
+  let lastWeek = Math.max(...dataWeeks);
+  let weekArray = new Array();
+  for (let i = firstWeek; i <= lastWeek; i++) {
+    let date = new Date(firstDate)
+    date.setMilliseconds(date.getMilliseconds() + i*(7 * 24 * 60 * 60 * 1000));
+    weekArray.push([i,date]);
+  };
+
+  // Set Headers, including one for each unique gathering service
+  let ssHeaders = ['Week','Date',null,'Total','WM','Other','Unique',null,'LY Total','LY WM','LY Other','LY Unique',null];
+  let services = new Array();
+  gatheringData.forEach(item => {
+    let events = item.events;
+    events.forEach(event => services.push(event.name))
+  });
+  services = services.filter(onlyUnique);
+  ssHeaders.push('Total',...services);
+
+  // For each week, add all relevant data into an array for the spreadsheet
+  let ssArray = new Array();
+  weekArray.forEach(row => {
+    let week = row[0];
+    let date = row[1];
+    let tyWm,tyOth,tyTot,tyUni,lyWm,lyOth,lyTot,lyUni,gathTot;
+    let tyVil = villageData.filter(item => item.year === 'ty' && item.week === week);
+    tyVil = tyVil[0];
+    if (tyVil) {
+      tyWm = tyVil.wm;
+      tyOth = tyVil.other;
+      tyUni = tyVil.unique;
+      tyTot = tyVil.sum;
+    };
+    let lyVil = villageData.filter(item => item.year === 'ly' && item.week === week);
+    lyVil = lyVil[0];    
+    if (lyVil) {
+      lyWm = lyVil.wm;
+      lyOth = lyVil.other;
+      lyUni = lyVil.unique;
+      lyTot = lyVil.sum;
+    };
+
+    let gathStuff = new Array(services.length+1)
+    let gath = gatheringData.filter(item => item.week === week);
+    gath = gath[0];
+    if (gath) {
+      gathTot = gath.sum;
+      let events = gath.events;
+      services.forEach((service,i) => {
+        let count;
+        events.forEach(event => {
+          if (service === event.name) {
+            count = event.count
+          };
+        });
+        gathStuff[i+1] = count;
+      });
+      gathStuff[0] = gathTot;
+    };
+
+    ssArray.push([week,date,null,tyTot,tyWm,tyOth,tyUni,null,lyTot,lyWm,lyOth,lyUni,null,...gathStuff]);
+  });
+
+  // Get medians for each column
+  let medianArray = ['Median',null];
+  for (let i = 2; i < ssHeaders.length; i++) {
+    let col = [...ssArray].map(row => row.slice(i,i+1)).flat();
+    col = col.filter(val => val > 0);
+    let median =  getMedian(col);
+    median = isNaN(median) ? null : median;
+    medianArray.push(median);
+  };
+
+  let categoryArray = [null,null,null,'Village This Year',null,null,null,null,'Village Last Year',null,null,null,null,'Gathering']
+  for (let i = 0; i < services.length; i++) {categoryArray.push(null)}
+
+  ssArray.unshift(categoryArray,ssHeaders);
+  ssArray.push(ssHeaders.map(v => null),medianArray);
+  let attendanceSheet = report.getSheetByName('Attendance');
+  attendanceSheet.getRange(1,1,ssArray.length,ssArray[0].length).setValues(ssArray);
+  
+}
+
+function getGatheringData(site) {
+
+  const masterSheet = ss.getSheetByName('Gathering');
+  const masterData = masterSheet.getRange(2,1,masterSheet.getLastRow()-1,8).getValues();
+  const data = masterData.filter(row => row[0] == site);
+  const startDate = new Date('8/1/2021');
+
+  let objArray = new Array();
+  let summaryData = {
+    week_count: 0,
+    week_median: 0,
+    week_totals: [],
+    events: []
+  };
+  let ssArray = new Array();
+  
+  // Add each event occurence to objArray
+  data.forEach(function(row) {
+    let name = row[2];
+    let week = row[3];
+    let date = new Date(startDate)
+    date.setDate(date.getDate() + 7 * (week-1))
+    let count = row[7];
+    let newWeek = true;
+    let item;
+    
+    for (let i in objArray) {
+      item = objArray[i];
+      if (item.week == week) {
+        newWeek = false;
+        break;
+      };
+    };
+
+    if (newWeek) {
+      objArray.push({
+        type: 'gathering',
+        year: 'ty',
+        week: week,
+        sum: count,
+        date: date,
+        events: [{
+          name: name,
+          count: count
+        }]
+      });
+    } else {
+      item.sum = item.sum + count;
+      item.events.push({
+        name: name,
+        count: count
+      });
+    };
+  });
+
+  // Sort by week ascending
+  objArray.sort((a,b) => a.week - b.week)
+  
+  // Add event occurences to summaryData
+  for (let i in objArray) {
+    let item = objArray[i];
+    summaryData.week_count++;
+    summaryData.week_totals.push(item.sum);
+
+    // Add events to summary event list
+    for (let j in item.events) {
+      let newEvent = true;
+      let eventName = item.events[j].name;
+      let eventCount = item.events[j].count
+      let summEvent;
+      for (let k in summaryData.events) {
+        summEvent = summaryData.events[k]
+        let summName = summEvent.name;
+        if (eventName == summName) {
+          newEvent = false;
+          break;
+        };
+      };
+      if (newEvent) {
+        summaryData.events.push({
+          name: eventName,
+          median: 0,
+          event_counts: [eventCount]
+        });
+      } else {
+        summEvent.event_counts.push(eventCount)
+      }
+    };
+  }
+
+  return objArray;
+
+}
+
+function villageAttendanceRow(row,site,year) {
+  if (site === row[0]) {
+    let obj = {
+      type: 'village',
+      year: year,
+      week: row[1],
+      date: row[2],      
+      wm: row[3],
+      other: row[4],
+      sum: row[5],
+      unique: row[6]
+    }
+    return obj;
+  }
+}
+
+function getVillageAttendanceData(site,report) {
+  
+  const masterSheet = ss.getSheetByName('Village');
+
+  // Get LY and TY data
+  const villageData = new Array();
+
+  const tyMasterData = masterSheet.getRange(2,1,masterSheet.getLastRow()-1,7).getValues();
+  const tyData = tyMasterData.forEach(row => {
+    let rowObj = villageAttendanceRow(row,site,'ty')
+    if (rowObj) {villageData.push(rowObj)};
+  });
+
+  const lyMasterData = masterSheet.getRange(2,9,masterSheet.getLastRow()-1,7).getValues();
+  const lyData = lyMasterData.forEach(row => {
+    let rowObj = villageAttendanceRow(row,site,'ly')
+    if (rowObj) {villageData.push(rowObj)};
+  });
+
+  return villageData;
+}
+
+function updateDiscipleshipData(site,report) {
+  const masterSheet = ss.getSheetByName('Discipleship');
+  const masterData = masterSheet.getRange(2,1,masterSheet.getLastRow()-1,8).getValues();
+  const data = masterData.filter(row => row[1] == site);
+  data.map(row => row.splice(0,2))
+
+  const sheet = report.getSheetByName('Discipleship');
+  
+  data.unshift(['Village','Individual','Belief','Demographic','Discipler','Discipleship Type']);
+  sheet.getRange(1,7,data.length,data[0].length).setValues(data);
+}
+
+function updateCustomData(site,report) {
+  const masterSheet = ss.getSheetByName('Custom');
+  const masterData = masterSheet.getRange(2,1,masterSheet.getLastRow()-1,4).getValues();
+  let field1Array,field2Array;
+  const data = masterData.filter(row => row[0] == site); // filter to one site's data
+
+  if (data.length > 0) {
+    const sheet = report.getSheetByName('Discipleship');
+
+    let field1Name = data[0][1]; // start with field from first row
+    field1Array = data.filter(row => row[1] == field1Name); // filter by just that field
+    field1Array.unshift([null,null,field1Name,null])
+
+    field2Array = data.filter(row => row[1] !== field1Name);
+    if (field2Array.length > 0) {
+      let field2Name = field2Array[0][1];
+      field2Array.unshift([null,null,null,null],[null,null,field2Name,null]);
+      field1Array = field1Array.concat(field2Array);
+    };
+
+    field1Array.map(row => row.splice(0,2))
+
+    sheet.getRange(2,14,field1Array.length,field1Array[0].length).setValues(field1Array);
+  }
+}
+
+function getUniqueWeeks(site,...ranges) {
+  let fullArray = new Array();
+  ranges.forEach(range => {
+    let arr = range.filter(row => row[0] === site)
+    arr = arr.map(row=>row[1]);
+    fullArray = fullArray.concat(arr)
+  });
+
+  fullArray = fullArray.filter(onlyUnique);
+  fullArray = fullArray.sort((a,b) => a-b);
+  return fullArray;
+}
+
+function onlyUnique(value, index, self) {
+  return self.indexOf(value) === index;
+}
