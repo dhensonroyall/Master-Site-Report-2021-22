@@ -1,0 +1,52 @@
+function stQuery() {
+  const sheet = ss.getSheetByName('Discipleship');
+  const data = queryBq();
+  sheet.getRange(2,1,data.length,data[0].length).setValues(data);
+}
+
+function queryBq() {
+
+  const projectId = 'shepherding-tool';
+  const datasetId = 'Weekly_Backup';
+  const tableName = '2021-22_2021_Fall';
+  const tableId = [projectId,datasetId,tableName].join('.');
+
+  const select = `FORMAT_DATE("%x", date),site,village,name,belief,demographic,discipler,discipleship_type`;
+  const where = `date > DATE_ADD(CURRENT_TIMESTAMP(), INTERVAL -7 DAY)`;
+  const order = `date DESC`;
+  
+  const request = {
+    query: `SELECT ${select} FROM \`${tableId}\` WHERE ${where} ORDER BY ${order}`,
+    useLegacySql: false
+  };
+
+  const queryResults = BigQuery.Jobs.query(request,projectId);
+  const jobId = queryResults.jobReference.jobId;
+  console.log('Query sent');
+
+  let rows = queryResults.rows;
+  while (queryResults.pageToken) {
+    queryResults = BigQuery.Jobs.getQueryResults(projectId,jobId, {
+      pageToken: queryResults.pageToken
+    });
+    rows = rows.concat(queryResults.rows);
+  };
+  console.log('Results received');
+
+  let data;
+  if (rows) {
+    data = new Array(rows.length);
+    for (let i in rows) {
+      let cols = rows[i].f;
+      data[i] = new Array(cols.length);
+      for (let j in cols) {
+        data[i][j] = null;
+        if (cols[j].v != 'null') {
+          data[i][j] = cols[j].v
+        };
+      };
+    };
+  };
+
+  return data;
+}
