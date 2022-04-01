@@ -1,0 +1,83 @@
+function getGatheringAttendance() {
+
+  const url = ccbUrl 
+    + 'srv=attendance_profiles'
+    + '&start_date=2021-08-01'
+    + '&end_date=2022-07-31';
+  const response = UrlFetchApp.fetch(url,ccbHeaders);
+  const xml = response.getContentText();
+  const doc = XmlService.parse(xml);
+  
+  const data = new Array();
+  const entries = doc.getRootElement().getChild('response').getChild('events').getChildren();
+  for (let i in entries) {
+    let item = entries[i];
+    let id = item.getAttribute('id').getValue();
+    let date = new Date(item.getChild('occurrence').getText());
+    let headCount = item.getChild('head_count').getText();
+    headCount = headCount ? headCount : 0;
+    let name = item.getChild('name').getText();
+    data.push([id,date,headCount,name]);
+  }
+  return data;
+}
+
+function getGatheringIdList() {
+  
+  const indexSheet = ss.getSheetByName('Index');
+  const index = indexSheet.getRange(2,1,indexSheet.getLastRow()-1,2).getValues();
+  const idList = new Array();
+  for (let i in index) {
+    let row = index[i];
+    let site = row[0];
+    let siteIdList = row[1].toString();
+    siteIdList = siteIdList.indexOf(';') > 0 ? siteIdList.split(';') : siteIdList;
+    if (typeof siteIdList == 'object') {
+      for (let j in siteIdList) {
+        let id = siteIdList[j];
+        idList.push([id,site]);
+      };
+    } else if (siteIdList) {
+      idList.push([siteIdList,site]);
+    };
+  };
+
+ return idList;
+
+}
+
+function formatGatheringAttendance() {
+  const startDate = new Date('8/1/2021');
+  const rawData = getGatheringAttendance();
+  const idList = getGatheringIdList();
+  const sheet = ss.getSheetByName('Gathering');
+  const niceData = new Array();
+
+  for (let i in rawData) {
+    let dataRow = rawData[i];
+    let dataId = dataRow[0];
+    let dateTime = dataRow[1];
+    let headCount = dataRow[2];
+    let name = dataRow[3];
+
+    let week = Math.ceil( (dateTime - startDate) / (7 * 24 * 60 * 60 * 1000) );
+
+    let site;
+    for (let j in idList) {
+      let idRow = idList[j];
+      let idId = idRow[0];
+      if (dataId == idId) {
+        site = idRow[1];
+      }
+    }
+    
+    let date = Utilities.formatDate(dateTime,"PST","M/d/yyyy");
+    let time = Utilities.formatDate(dateTime,"PST","hh:mm a");
+
+    niceData.push([site,dataId,name,week,dateTime,date,time,headCount]);
+  }
+
+  niceData.sort((a,b) => b[3] - a[3])
+
+  sheet.getRange(2,1,niceData.length,niceData[0].length).setValues(niceData);
+}
