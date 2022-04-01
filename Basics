@@ -1,0 +1,18 @@
+const ss = SpreadsheetApp.getActiveSpreadsheet();
+const ccbUrl = 'https://resonatechurch.ccbchurch.com/api.php?';
+const ccbHeaders = {'headers':{'Authorization':'Basic #####'}}
+
+function getMedian(arr) {
+  const mid = Math.floor(arr.length / 2),
+  nums = [...arr].sort((a, b) => a - b);
+  return arr.length % 2 !== 0 ? nums[mid] : (nums[mid - 1] + nums[mid]) / 2;
+}
+
+function onOpen() {
+  const ui = SpreadsheetApp.getUi();
+  ui.createMenu('Updates')
+    .addItem('Gathering Attendance','formatGatheringAttendance')
+    .addItem('Village Attendance','getVillageAttendance')
+    .addItem('Discipleship Data','stQuery')
+    .addToUi();
+}
