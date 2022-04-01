@@ -1,0 +1,161 @@
+function getShepherdingToolIndex() {
+
+  const sheet = ss.getSheetByName('Index');
+  const index = sheet.getRange(2,1,sheet.getLastRow()-1,4).getValues();
+  let stList = new Array();
+  for (let i in index) {
+    let row = index[i];
+    let site = row[0];
+    let stUrl = row[2];
+    let lyUrl = row[3];
+    let st,ly;
+    if (stUrl) { st = SpreadsheetApp.openByUrl(stUrl) };
+    if (lyUrl) { ly = SpreadsheetApp.openByUrl(lyUrl) };
+    stList.push({
+        site: site,
+        st: st,
+        ly: ly});
+  }
+
+  return stList;
+}
+
+function getLyVillageAttendance() {
+  const startDate = new Date('8/1/2020');
+  const sheet = ss.getSheetByName('Village');
+  let stList = getShepherdingToolIndex();
+  stList = stList.filter(item => item.ly)
+
+  const attendanceData = new Array();
+  for (let i in stList) {
+    let item = stList[i];
+    let site = item.site;
+    console.log(site)
+    ss.toast(site)
+    let st = item.ly;
+    let siteReport = st.getSheetByName('Site Report');
+
+    // Get Attendance
+    let siteData = siteReport.getRange('AF4:AK25').getValues();
+    for (let j in siteData) {
+      let row = siteData[j];
+      let date = row[0];
+      let week = Math.ceil( (new Date(date) - startDate) / (7 * 24 * 60 * 60 * 1000) );
+      let wm = row[1];
+      let other = row[2];
+      let total = row[4];
+      let unique = row[5];
+      if (typeof total == 'number') {
+        attendanceData.push([site,week,date,wm,other,total,unique]);
+      }
+    }
+  }
+
+  sheet.getRange(2,9,attendanceData.length,attendanceData[0].length).setValues(attendanceData);
+}
+
+function getVillageAttendance() {
+  const startDate = new Date('8/1/2021');
+  const sheet = ss.getSheetByName('Village');
+  let stList = getShepherdingToolIndex();
+  stList = stList.filter(item => item.st)
+  const attendanceData = new Array();
+  const customData = new Array();
+  for (let i in stList) {
+    let item = stList[i];
+    let site = item.site;
+    console.log(site)
+    ss.toast(site)
+    let st = item.st;
+    let siteReport = st.getSheetByName('Site Report');
+
+    // Get Attendance
+    let siteData = siteReport.getRange('N5:R25').getValues();
+    for (let j in siteData) {
+      let row = siteData[j];
+      let date = row[0];
+      let week = Math.ceil( (new Date(date) - startDate) / (7 * 24 * 60 * 60 * 1000) );
+      let wm = row[1];
+      let other = row[2];
+      let total = row[3];
+      let unique = row[4];
+      if (typeof total == 'number') {
+        attendanceData.push([site,week,date,wm,other,total,unique]);
+      }
+    }
+
+    // Get Custom Data
+    let custom1Data = siteReport.getRange('E3:F23').getValues();
+    if (!custom1Data[0][0] || custom1Data[0][0] == 'Custom 1') { custom1Data = null };
+    custom1Data = custom1Data ? custom1Data.filter(row => row[0]) : null;
+    let custom2Data = siteReport.getRange('H3:I23').getValues();
+    if (!custom2Data[0][0] || custom2Data[0][0] == 'Custom 2') { custom2Data = null };
+
+    if (custom1Data || custom2Data) {
+      customData.push({
+        site: site,
+        custom1: custom1Data,
+        custom2: custom2Data
+      })
+    }
+  }
+
+  sheet.getRange(2,1,attendanceData.length,attendanceData[0].length).setValues(attendanceData);
+  updateCustomDataArray(customData);
+}
+
+function updateCustomDataArray(data) {
+  let fullArray = new Array();
+  for (let i in data) {
+    let item = data[i];
+    let site = item.site;
+    let custom1 = item.custom1;
+    let custom2 = item.custom2;
+
+    if (custom1) {
+      let custom1Name = custom1[0][0];
+      for (let i = 1; i < custom1.length; i++) {
+        let row = custom1[i];
+        fullArray.push([site,custom1Name,row[0],row[1]])
+      }
+      // custom1.map( row => row.unshift(site));
+      // customDataArr = customDataArr.concat(custom1)
+    }
+    if (custom2) {
+      let custom2Name = custom2[0][0];
+      for (let i = 1; i < custom2.length; i++) {
+        let row = custom2[i];
+        fullArray.push([site,custom2Name,row[0],row[1]])
+      }
+    }
+  }
+
+  const sheet = ss.getSheetByName('Custom');
+  sheet.clear();
+  fullArray.unshift(['Site','Field','Category','Number'])
+  sheet.getRange(1,1,fullArray.length,4).setValues(fullArray)
+}
+
+function updateCustomData(data) {
+
+  const sheet = ss.getSheetByName('Custom');
+  sheet.clear();
+  let col = 1;
+  for (let i in data) {
+    let item = data[i];
+    let site = item.site;
+    let custom1 = item.custom1;
+    let custom2 = item.custom2;
+    if (custom1) {
+      custom1.unshift([site,site]);
+      sheet.getRange(1,col,custom1.length,2).setValues(custom1);
+      col += 2;
+    }
+    if (custom2) {
+      custom2.unshift([site,site]);
+      sheet.getRange(1,col,custom2.length,2).setValues(custom2);
+      col += 2;
+    }
+    
+  }
+}
