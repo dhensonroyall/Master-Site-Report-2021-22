@@ -1,0 +1,47 @@
+function duplicateTemplate() {
+  const template = SpreadsheetApp.openByUrl('https://docs.google.com/spreadsheets/d/1axNjrNKgSqyHrXDHQbshobsL6QEjq3pB2TJtc2p_aLo/edit#gid=806655124');
+  const index = ss.getSheetByName('Index').getDataRange().getValues();
+  index.shift();
+  index.forEach(row => {
+    let site = row[0];
+    console.log(site);
+    let report = template.copy(`${site} Site Report Fall 2021`);
+    let url = report.getUrl();
+    reportUpdate(site,report);
+    let attendanceSheet = report.getSheetByName('Attendance');
+    let lastRow = attendanceSheet.getLastRow();
+    let lastCol = attendanceSheet.getLastColumn();
+    let bandings = [
+      {theme: SpreadsheetApp.BandingTheme.LIGHT_GREY, cols: 2, start: 1},
+      {theme: SpreadsheetApp.BandingTheme.LIGHT_GREEN,cols: 4, start: 4},
+      {theme: SpreadsheetApp.BandingTheme.YELLOW,cols:4,start:9},
+      {theme: SpreadsheetApp.BandingTheme.BLUE,cols:lastCol-12,start:14}
+    ];
+    bandings.forEach(section => {
+      let start = section.start;
+      let cols = section.cols;
+      let rows = lastRow-1;
+      let range = attendanceSheet.getRange(2,start,rows,cols);
+      range.applyRowBanding(section.theme,true,true)
+    })
+
+    attendanceSheet.getRange(lastRow,1,1,lastCol).setFontWeight('bold')
+    attendanceSheet.getRange(lastRow,1,1,2).merge();
+    attendanceSheet.deleteColumns(lastCol+1,attendanceSheet.getMaxColumns()-lastCol);
+
+    row.push(url);
+  })
+
+  ss.getSheetByName('Index').getRange(2,1,index.length,index[0].length).setValues(index);
+}
+
+function fixReport() {
+  const index = ss.getSheetByName('Index').getDataRange().getValues();
+  index.shift();
+  index.forEach(row => {
+    let site = row[0];
+    let st = row[2];
+    let report = SpreadsheetApp.openByUrl(row[4]);
+    report.getSheetByName('Discipleship').getRange(1,1).setValue(st);
+  })
+}
